@@ -1,7 +1,3 @@
-# 1. VPC ID
-# 2. Public subnets - subnet_key => { subnet_id, availability_zone }
-# 3. Private subnets - subnet_key => { subnet_id, availability_zone }
-
 locals {
   output_public_subnets = {
     for key in keys(local.public_subnets) : key => {

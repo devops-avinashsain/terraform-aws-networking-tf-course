@@ -1,5 +1,5 @@
 locals {
-  project_name = "13-local-modules"
+  project_name = "networking-tf-course"
 }
 
 data "aws_ami" "ubuntu" {
