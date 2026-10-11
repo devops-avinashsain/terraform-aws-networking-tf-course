@@ -1,51 +1,59 @@
 # terraform-aws-networking-tf-course
-Developed a reusable Terraform networking module as part of the Terraform course, focusing on Infrastructure as Code (IaC) to automate and manage cloud networking resources.  Key Skills: Terraform, AWS VPC, Subnets, Route Tables, Internet Gateway, Security Groups, and Infrastructure as Code (IaC).
 
-Terraform config that builds its own local VPC/subnet module instead of using
-a module from the registry, then consumes it from the root configuration.
+A reusable Terraform module that creates a VPC and any number of
+public/private subnets from a simple config map, with route tables and an
+internet gateway wired up automatically when at least one subnet is public.
 
-## How it works
-
-1. **`modules/networking`** is a hand-written local module (see its own
-   [README](modules/networking/README.md)) that creates a VPC and any number
-   of public/private subnets from a `subnet_config` map, with route
-   tables/internet gateway wired up automatically when at least one subnet is
-   public.
-2. **Root config** (`networking.tf`) calls that module via
-   `source = "./modules/networking"`, defining one VPC with 4 subnets across
-   4 AZs (2 public, 2 private).
-3. **Compute** (`compute.tf`) looks up the latest Ubuntu 22.04 AMI and
-   launches a plain `aws_instance` into one of the module's private subnets
-   (`module.vpc.private_subnets["subnet_1"].subnet_id`).
-4. **Outputs** (`outputs.tf`) re-expose the module's VPC ID and public/private
-   subnet maps at the root level.
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `providers.tf` | Terraform/AWS provider configuration (region `us-east-1`) |
-| `networking.tf` | Root call into the local `./modules/networking` module |
-| `compute.tf` | Ubuntu AMI lookup + `aws_instance` in a private subnet |
-| `outputs.tf` | Re-exports VPC ID and subnet maps from the module |
-| `modules/networking/` | The local VPC/subnet module (own README, variables, outputs) |
+Developed as part of a Terraform course to practice building and publishing
+a module to the Terraform Registry.
 
 ## Usage
 
-```bash
-terraform init
-terraform plan
-terraform apply
+```hcl
+module "vpc" {
+  source  = "devops-avinashsain/networking-tf-course/aws"
+  version = "~> 0.2"
+
+  vpc_config = {
+    cidr_block = "10.0.0.0/16"
+    name       = "example-vpc"
+  }
+
+  subnet_config = {
+    subnet_1 = {
+      cidr_block = "10.0.0.0/24"
+      az         = "us-east-1a"
+    }
+    subnet_2 = {
+      cidr_block = "10.0.1.0/24"
+      # Public subnets are indicated by setting the "public" option to true.
+      public = true
+      az     = "us-east-1b"
+    }
+  }
+}
 ```
+
+See [`examples/complete`](examples/complete) for a full example.
+
+## Inputs
+
+| Name | Description | Type |
+|---|---|---|
+| `vpc_config` | `cidr_block` and `name` for the VPC | `object({ cidr_block = string, name = string })` |
+| `subnet_config` | Map of subnets to create, keyed by an arbitrary name. Each entry's `cidr_block` must be a valid CIDR within the VPC's range, `az` must be a valid AZ for the region, and `public` controls whether the subnet gets a route to the internet gateway (default `false`) | `map(object({ cidr_block = string, public = optional(bool, false), az = string }))` |
+
+## Outputs
+
+| Name | Description |
+|---|---|
+| `vpc_id` | The AWS ID of the created VPC |
+| `public_subnets` | Map of public subnets: key => `{ subnet_id, availability_zone }` |
+| `private_subnets` | Map of private subnets: key => `{ subnet_id, availability_zone }` |
 
 ## Notes
 
-- Subnet keys (`subnet_1`, `subnet_2`, ...) in `subnet_config` are arbitrary
-  names you choose — they become the map keys on `module.vpc.public_subnets`
-  / `module.vpc.private_subnets`, and are referenced that way elsewhere
-  (e.g. `compute.tf`'s `subnet_id`).
-- Each subnet's `az` must be a valid, available AZ for the region — the
-  module enforces this with a `precondition` and fails with a clear error
-  listing valid AZs otherwise.
-- A public route table + internet gateway are only created if at least one
+- A subnet's `az` must be a valid, available AZ for the region — invalid AZs
+  fail with a clear error listing the valid options for the region.
+- A public route table and internet gateway are only created if at least one
   subnet in `subnet_config` has `public = true`.
